@@ -102,58 +102,65 @@ module.exports = async (req, res) => {
         return res.status(200).end();
     }
     
-    const urlPath = req.url || '';
+    // IMPORTANT: Vercel sometimes has full path with /api prefix
+    // Let's extract the actual path
+    let path = req.url || '/';
+    // Remove query string
+    if (path.includes('?')) {
+        path = path.split('?')[0];
+    }
+    
+    console.log('Method:', req.method, 'Path:', path); // Debug log
     
     // GET / - Root endpoint
-    if (req.method === 'GET' && (urlPath === '/' || urlPath === '/api/download')) {
+    if (req.method === 'GET' && (path === '/' || path === '/api/download')) {
         return res.status(200).json({
             name: 'TikTok Downloader API',
             version: '2.0.0',
-            description: 'Download TikTok videos without watermark - HD, Non-HD & MP3',
+            description: 'Download TikTok videos without watermark',
             endpoints: {
                 download: {
-                    method: 'POST or GET',
+                    methods: ['GET', 'POST'],
                     url: '/api/download',
-                    body: { url: 'tiktok_video_url' }
+                    examples: {
+                        get: '/api/download?url=VIDEO_URL',
+                        post: 'POST /api/download with JSON body { "url": "VIDEO_URL" }'
+                    }
                 },
-                info: {
-                    method: 'GET',
-                    url: '/api/info?url=tiktok_video_url'
-                },
-                health: {
-                    method: 'GET',
-                    url: '/health'
-                }
+                info: '/api/info?url=VIDEO_URL',
+                health: '/health'
             }
         });
     }
     
     // GET /health - Health check
-    if (req.method === 'GET' && urlPath === '/health') {
+    if (req.method === 'GET' && path === '/health') {
         return res.status(200).json({
             status: 'OK',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime()
         });
     }
     
     // ========== GET /api/download - Support GET method ==========
-    // මේක තමයි ඔයාට අලුතෙන් එකතු කරන්න ඕනි කොටස
-    if (req.method === 'GET' && (urlPath === '/api/download')) {
+    if (req.method === 'GET' && path === '/api/download') {
         const { url } = req.query;
+        
+        console.log('GET download request, URL:', url);
         
         if (!url) {
             return res.status(400).json({
                 success: false,
-                error: 'URL is required',
-                example: '/api/download?url=https://www.tiktok.com/@user/video/123456789'
+                error: 'URL parameter is required',
+                example: '/api/download?url=https://vt.tiktok.com/ZSHdefqT1/'
             });
         }
         
-        const tiktokRegex = /(tiktok\.com|vt\.tiktok\.com|vm\.tiktok\.com|tiktok\.com\/@[\w.-]+\/video\/\d+)/;
+        const tiktokRegex = /(tiktok\.com|vt\.tiktok\.com|vm\.tiktok\.com)/i;
         if (!tiktokRegex.test(url)) {
             return res.status(400).json({
                 success: false,
-                error: 'Invalid TikTok URL'
+                error: 'Invalid TikTok URL. Please provide a valid TikTok video link'
             });
         }
         
@@ -167,10 +174,9 @@ module.exports = async (req, res) => {
             });
         }
     }
-    // ========== GET /api/download ඉවරයි ==========
     
     // GET /api/info - Get video info only
-    if (req.method === 'GET' && urlPath === '/api/info') {
+    if (req.method === 'GET' && path === '/api/info') {
         const { url } = req.query;
         
         if (!url) {
@@ -181,7 +187,7 @@ module.exports = async (req, res) => {
             });
         }
         
-        const tiktokRegex = /(tiktok\.com|vt\.tiktok\.com|vm\.tiktok\.com|tiktok\.com\/@[\w.-]+\/video\/\d+)/;
+        const tiktokRegex = /(tiktok\.com|vt\.tiktok\.com|vm\.tiktok\.com)/i;
         if (!tiktokRegex.test(url)) {
             return res.status(400).json({
                 success: false,
@@ -201,18 +207,18 @@ module.exports = async (req, res) => {
     }
     
     // POST /api/download - Download video
-    if (req.method === 'POST' && (urlPath === '/api/download' || urlPath === '/')) {
+    if (req.method === 'POST' && (path === '/api/download' || path === '/')) {
         const { url } = req.body;
         
         if (!url) {
             return res.status(400).json({
                 success: false,
-                error: 'URL is required',
+                error: 'URL is required in request body',
                 example: { url: 'https://www.tiktok.com/@username/video/123456789' }
             });
         }
         
-        const tiktokRegex = /(tiktok\.com|vt\.tiktok\.com|vm\.tiktok\.com|tiktok\.com\/@[\w.-]+\/video\/\d+)/;
+        const tiktokRegex = /(tiktok\.com|vt\.tiktok\.com|vm\.tiktok\.com)/i;
         if (!tiktokRegex.test(url)) {
             return res.status(400).json({
                 success: false,
@@ -232,9 +238,18 @@ module.exports = async (req, res) => {
     }
     
     // 404 for any other route
+    console.log('404 - Path not matched:', path);
     return res.status(404).json({
         success: false,
         error: 'Endpoint not found',
-        available_endpoints: ['/api/download (GET/POST)', '/api/info (GET)', '/health (GET)']
+        path_requested: path,
+        method: req.method,
+        available_endpoints: [
+            '/ (GET)',
+            '/api/download (GET with ?url=)',
+            '/api/download (POST with JSON body)',
+            '/api/info (GET with ?url=)',
+            '/health (GET)'
+        ]
     });
 };
